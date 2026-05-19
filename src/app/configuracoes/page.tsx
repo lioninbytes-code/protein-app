@@ -27,8 +27,9 @@ export default function SettingsPage() {
             <input
               type="number"
               inputMode="numeric"
-              value={data.proteinGoalG}
-              onChange={(e) => update((d) => ({ ...d, proteinGoalG: Math.max(10, Number(e.target.value) || 0) }))}
+              value={data.proteinGoalG === 0 ? '' : data.proteinGoalG}
+              onChange={(e) => update((d) => ({ ...d, proteinGoalG: e.target.value === '' ? 0 : Number(e.target.value) }))}
+              onBlur={() => update((d) => ({ ...d, proteinGoalG: Math.max(10, d.proteinGoalG || 10) }))}
               className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-lg font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)] w-32"
             />
           </Field>

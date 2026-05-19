@@ -11,7 +11,8 @@ export function OnboardingCard({ onDone }: Props) {
   const [intensity, setIntensity] = useState<'low' | 'mid' | 'high'>('mid');
 
   const multiplier = intensity === 'low' ? 1.2 : intensity === 'mid' ? 1.6 : 2.0;
-  const goal = Math.round(weight * multiplier);
+  const safeWeight = Math.max(30, Math.min(200, weight || 80));
+  const goal = Math.round(safeWeight * multiplier);
 
   return (
     <div className="mx-auto max-w-md px-5 pt-10 pb-12 flex flex-col gap-6">
@@ -31,8 +32,9 @@ export function OnboardingCard({ onDone }: Props) {
           <input
             type="number"
             inputMode="numeric"
-            value={weight}
-            onChange={(e) => setWeight(Math.max(30, Math.min(200, Number(e.target.value) || 0)))}
+            value={weight === 0 ? '' : weight}
+            onChange={(e) => setWeight(e.target.value === '' ? 0 : Number(e.target.value))}
+            onBlur={() => setWeight(safeWeight)}
             className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-lg font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
           />
         </label>
@@ -69,7 +71,10 @@ export function OnboardingCard({ onDone }: Props) {
       </div>
 
       <button
-        onClick={() => onDone(goal)}
+        onClick={() => {
+          setWeight(safeWeight);
+          onDone(goal);
+        }}
         className="w-full h-14 rounded-2xl bg-[var(--orange)] text-black font-semibold text-base active:bg-[var(--orange-bright)]"
       >
         Começar
