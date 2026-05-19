@@ -9,12 +9,17 @@ import { addEntry } from '@/lib/storage';
 type Props = {
   food: Food;
   onCancel: () => void;
+  initialGrams?: number;
 };
 
-export function ConfirmFood({ food, onCancel }: Props) {
+export function ConfirmFood({ food, onCancel, initialGrams }: Props) {
   const router = useRouter();
-  const [grams, setGrams] = useState(food.servingGrams ?? 100);
-  const [servings, setServings] = useState(1);
+  const [grams, setGrams] = useState(initialGrams ?? food.servingGrams ?? 100);
+  const [servings, setServings] = useState(
+    initialGrams && food.servingGrams
+      ? Math.max(0.5, Math.round((initialGrams / food.servingGrams) * 2) / 2)
+      : 1
+  );
 
   const totalGrams = food.servingGrams ? food.servingGrams * servings : grams;
   const proteinG = (food.proteinPer100g * totalGrams) / 100;
@@ -62,8 +67,9 @@ export function ConfirmFood({ food, onCancel }: Props) {
                 inputMode="decimal"
                 step={0.5}
                 min={0.5}
-                value={servings}
-                onChange={(e) => setServings(Math.max(0.1, Number(e.target.value) || 0.1))}
+                value={servings === 0 ? '' : servings}
+                onChange={(e) => setServings(e.target.value === '' ? 0 : Number(e.target.value))}
+                onBlur={() => setServings((s) => Math.max(0.1, s || 0.1))}
                 className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-base font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
               />
             </label>
@@ -76,8 +82,9 @@ export function ConfirmFood({ food, onCancel }: Props) {
               inputMode="numeric"
               step={5}
               min={1}
-              value={grams}
-              onChange={(e) => setGrams(Math.max(1, Number(e.target.value) || 1))}
+              value={grams === 0 ? '' : grams}
+              onChange={(e) => setGrams(e.target.value === '' ? 0 : Number(e.target.value))}
+              onBlur={() => setGrams((g) => Math.max(1, g || 1))}
               className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-lg font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
             />
             <div className="flex gap-2">
