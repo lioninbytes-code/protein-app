@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0a0a0a;
+  --bg-elevated: #161616;
+  --bg-card: #1f1f1f;
+  --border: #2a2a2a;
+  --text: #fafafa;
+  --text-muted: #a0a0a0;
+  --text-dim: #707070;
+  --orange: #ff7a1a;
+  --orange-bright: #ff9533;
+  --orange-dim: #c25800;
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-card: var(--bg-card);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-orange: var(--orange);
+  --color-orange-bright: var(--orange-bright);
+  --color-orange-dim: var(--orange-dim);
+  --color-success: var(--green);
+  --color-danger: var(--red);
+  --color-warn: var(--yellow);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  overscroll-behavior-y: none;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-top: env(safe-area-inset-top);
 }
+
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+input, textarea, select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+@keyframes pulse-orange {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 122, 26, 0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 122, 26, 0); }
+}
+.animate-pulse-orange { animation: pulse-orange 2s infinite; }

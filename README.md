@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Proteína
 
-## Getting Started
+Contador pessoal de proteína. PWA (Progressive Web App) feito para uso pessoal no iPhone via Safari → "Adicionar à Tela de Início".
 
-First, run the development server:
+## O que faz
+
+- **Buscar alimento por nome** (offline, tabela TACO brasileira)
+- **Escanear código de barras** (via câmera, fonte Open Food Facts gratuita)
+- **Tirar foto do alimento** (via Claude API — opcional, paga)
+- **Meta diária de proteína** com anel de progresso
+- **Histórico** por dia
+- **Sugestões** de alimentos com melhor relação proteína/caloria
+
+## Rodar localmente
 
 ```bash
+npm install
+cp .env.example .env.local
+# edite .env.local e cole sua ANTHROPIC_API_KEY
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Pensado para Vercel. Conectar o repo do GitHub na Vercel e definir a variável de ambiente `ANTHROPIC_API_KEY`. A pasta `public/` já contém manifest e ícones para PWA.
 
-## Learn More
+## Stack
 
-To learn more about Next.js, take a look at the following resources:
+- Next.js 16 (App Router)
+- React 19
+- Tailwind CSS 4
+- `@anthropic-ai/sdk` para análise de foto
+- `@zxing/browser` para leitura de código de barras
+- localStorage para persistência (cada dispositivo é independente)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Custos de API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Análises de foto usam **Claude Haiku 4.5** (modelo barato e rápido). Estimativa: ~US$0,003 por foto. O app tem contador local + sugere configurar o spending cap no [console.anthropic.com](https://platform.claude.com).
