@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Loader2, AlertCircle, Keyboard } from 'lucide-react';
+import { Camera, Loader2, AlertCircle, Keyboard, RefreshCw } from 'lucide-react';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
 
@@ -11,6 +11,7 @@ type State =
   | { kind: 'loading'; code: string }
   | { kind: 'found'; food: Food }
   | { kind: 'manual' }
+  | { kind: 'not-in-off'; code: string }
   | { kind: 'error'; message: string };
 
 export function BarcodeTab() {
@@ -28,24 +29,38 @@ export function BarcodeTab() {
       try {
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
         const reader = new BrowserMultiFormatReader();
-        const controls = await reader.decodeFromVideoDevice(
-          undefined,
+
+        // Force back camera on phones via MediaStreamConstraints.
+        const constraints: MediaStreamConstraints = {
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        };
+
+        const controls = await reader.decodeFromConstraints(
+          constraints,
           videoRef.current!,
           (result) => {
             if (cancelled || !result) return;
             const code = result.getText();
             controls.stop();
+            setState({ kind: 'loading', code });
             fetchOpenFoodFacts(code).then((food) => {
               if (cancelled) return;
               if (food) setState({ kind: 'found', food });
-              else setState({ kind: 'error', message: `Produto ${code} não encontrado no Open Food Facts.` });
+              else setState({ kind: 'not-in-off', code });
             });
-            setState({ kind: 'loading', code });
           }
         );
         controlsRef.current = controls;
       } catch (e) {
-        if (!cancelled) setState({ kind: 'error', message: (e as Error).message });
+        if (cancelled) return;
+        const err = e as Error;
+        const msg = err.name === 'NotAllowedError'
+          ? 'Permissão da câmera foi negada. Vai em Ajustes do iPhone → Safari → Câmera e libera o acesso.'
+          : err.name === 'NotFoundError'
+            ? 'Câmera traseira não encontrada neste dispositivo.'
+            : err.message || 'Erro ao abrir câmera.';
+        setState({ kind: 'error', message: msg });
       }
     })();
 
@@ -59,6 +74,37 @@ export function BarcodeTab() {
     return <ConfirmFood food={state.food} onCancel={() => setState({ kind: 'idle' })} />;
   }
 
+  if (state.kind === 'not-in-off') {
+    return (
+      <div className="flex flex-col items-center text-center gap-4 py-8">
+        <AlertCircle className="w-10 h-10 text-[var(--warn)]" />
+        <div>
+          <p className="text-base font-medium">Código lido com sucesso</p>
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            <span className="font-mono">{state.code}</span>
+          </p>
+          <p className="text-sm text-[var(--text-muted)] mt-3 max-w-xs">
+            Mas esse produto não está cadastrado no Open Food Facts. Tente buscar pelo nome ou tirar foto da tabela nutricional.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setState({ kind: 'scanning' })}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-sm"
+          >
+            <RefreshCw className="w-4 h-4" /> Tentar outro
+          </button>
+          <button
+            onClick={() => setState({ kind: 'idle' })}
+            className="px-4 py-2 rounded-xl bg-[var(--orange)] text-black text-sm font-medium"
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (state.kind === 'manual') {
     return (
       <div className="flex flex-col gap-4">
@@ -68,7 +114,7 @@ export function BarcodeTab() {
             type="text"
             inputMode="numeric"
             value={manualCode}
-            onChange={(e) => setManualCode(e.target.value)}
+            onChange={(e) => setManualCode(e.target.value.replace(/\D/g, ''))}
             placeholder="7891000..."
             className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-3 py-3 text-base focus:outline-none focus:border-[var(--orange)]"
           />
@@ -79,7 +125,7 @@ export function BarcodeTab() {
             setState({ kind: 'loading', code: manualCode });
             const food = await fetchOpenFoodFacts(manualCode);
             if (food) setState({ kind: 'found', food });
-            else setState({ kind: 'error', message: `Produto ${manualCode} não encontrado.` });
+            else setState({ kind: 'not-in-off', code: manualCode });
           }}
           className="h-12 rounded-2xl bg-[var(--orange)] text-black font-semibold"
         >
@@ -126,8 +172,17 @@ export function BarcodeTab() {
           </div>
         </div>
         <p className="text-sm text-center text-[var(--text-muted)]">
-          Aponte para o código de barras do produto.
+          Encaixe o código de barras dentro do quadrado laranja.
         </p>
+        <p className="text-xs text-center text-[var(--text-dim)]">
+          Dica: ilumine bem e mantenha cerca de 10–15 cm de distância.
+        </p>
+        <button
+          onClick={() => setState({ kind: 'manual' })}
+          className="flex items-center justify-center gap-2 py-2 text-sm text-[var(--text-muted)]"
+        >
+          <Keyboard className="w-4 h-4" /> Digitar manualmente
+        </button>
         <button
           onClick={() => setState({ kind: 'idle' })}
           className="text-sm text-[var(--text-muted)]"
