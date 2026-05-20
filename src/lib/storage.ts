@@ -82,7 +82,14 @@ export function totalsForDate(data: AppData, date: string) {
 }
 
 export function addCustomFood(food: Food): void {
-  updateData((d) => ({ ...d, customFoods: [...d.customFoods, food] }));
+  updateData((d) => {
+    const filtered = d.customFoods.filter((f) => f.id !== food.id);
+    return { ...d, customFoods: [...filtered, food] };
+  });
+}
+
+export function findCustomFood(id: string): Food | undefined {
+  return loadData().customFoods.find((f) => f.id === id);
 }
 
 export function logApiSpend(cents: number, kind: ApiSpendEntry['kind'] = 'photo'): void {

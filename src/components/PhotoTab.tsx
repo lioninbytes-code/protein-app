@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { Camera, Loader2, AlertCircle } from 'lucide-react';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
-import { logApiSpend } from '@/lib/storage';
+import { addCustomFood, logApiSpend } from '@/lib/storage';
 import { budgetState } from '@/lib/cost';
 import { useAppData } from '@/lib/useAppData';
 import { centsToUSD } from '@/lib/format';
@@ -43,8 +43,18 @@ export function PhotoTab() {
         logApiSpend(json.estimatedCents, 'photo');
       }
 
+      // Stable ID by name slug so repeated photos of the same food
+      // hit the cache via name search rather than spending tokens again.
+      const slug = String(json.name || 'foto')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+        .slice(0, 50);
+
       const food: Food = {
-        id: `photo-${Date.now()}`,
+        id: `photo-${slug || Date.now()}`,
         source: 'photo',
         name: json.name,
         category: json.category || 'Foto',
@@ -55,6 +65,7 @@ export function PhotoTab() {
         servingGrams: json.estimatedServingGrams,
       };
 
+      addCustomFood(food);
       setState({ kind: 'found', food, previewUrl });
     } catch (e) {
       setState({ kind: 'error', message: (e as Error).message });

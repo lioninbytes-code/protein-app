@@ -50,8 +50,12 @@ export function bestProteinPerCalorie(limit = 15): Food[] {
     .slice(0, limit);
 }
 
-export function findById(id: string): Food | undefined {
-  return TACO_FOODS.find((f) => f.id === id);
+export function findById(id: string, customFoods: Food[] = []): Food | undefined {
+  return TACO_FOODS.find((f) => f.id === id) ?? customFoods.find((f) => f.id === id);
+}
+
+export function allFoods(customFoods: Food[] = []): Food[] {
+  return [...customFoods, ...TACO_FOODS];
 }
 
 export function categories(): string[] {

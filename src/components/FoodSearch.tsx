@@ -2,15 +2,20 @@
 
 import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import { searchFoods } from '@/lib/taco';
+import { searchFoods, allFoods } from '@/lib/taco';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
+import { useAppData } from '@/lib/useAppData';
 
 export function FoodSearch() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Food | null>(null);
+  const { data } = useAppData();
 
-  const results = useMemo(() => searchFoods(query), [query]);
+  const results = useMemo(
+    () => searchFoods(query, allFoods(data.customFoods)),
+    [query, data.customFoods],
+  );
 
   if (selected) {
     return <ConfirmFood food={selected} onCancel={() => setSelected(null)} />;

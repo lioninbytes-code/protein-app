@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Loader2, AlertCircle, Keyboard, RefreshCw } from 'lucide-react';
+import { Camera, Loader2, AlertCircle, Keyboard, RefreshCw, Sparkles, Database } from 'lucide-react';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
+import { addCustomFood, findCustomFood, logApiSpend } from '@/lib/storage';
+import { useAppData } from '@/lib/useAppData';
+import { budgetState } from '@/lib/cost';
+import { centsToUSD } from '@/lib/format';
 
 type State =
   | { kind: 'idle' }
   | { kind: 'scanning' }
-  | { kind: 'loading'; code: string }
-  | { kind: 'found'; food: Food }
-  | { kind: 'manual' }
+  | { kind: 'loading-off'; code: string }
   | { kind: 'not-in-off'; code: string }
+  | { kind: 'searching-claude'; code: string }
+  | { kind: 'found'; food: Food; fromCache?: boolean; foundVia?: 'cache' | 'off' | 'claude' }
+  | { kind: 'manual' }
   | { kind: 'error'; message: string };
 
 export function BarcodeTab() {
@@ -19,6 +24,70 @@ export function BarcodeTab() {
   const [manualCode, setManualCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const { data } = useAppData();
+
+  const photoOrSearchAllowed =
+    data.prefs.photoEnabled && data.apiSpend.totalCents < data.apiSpend.capCents;
+  const bState = budgetState(data.apiSpend.totalCents, data.apiSpend.capCents);
+
+  async function lookupCode(code: string) {
+    // 1. Local cache
+    const cached = findCustomFood(`barcode-${code}`);
+    if (cached) {
+      setState({ kind: 'found', food: cached, fromCache: true, foundVia: 'cache' });
+      return;
+    }
+
+    // 2. Open Food Facts
+    setState({ kind: 'loading-off', code });
+    const off = await fetchOpenFoodFacts(code);
+    if (off) {
+      addCustomFood(off);
+      setState({ kind: 'found', food: off, foundVia: 'off' });
+      return;
+    }
+
+    setState({ kind: 'not-in-off', code });
+  }
+
+  async function searchWithClaude(code: string) {
+    setState({ kind: 'searching-claude', code });
+    try {
+      const res = await fetch('/api/buscar-produto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const json = await res.json();
+
+      if (typeof json.estimatedCents === 'number') {
+        logApiSpend(json.estimatedCents, 'photo');
+      }
+
+      if (!res.ok || json.error) {
+        setState({ kind: 'error', message: json.error || `Erro ${res.status}` });
+        return;
+      }
+
+      const food: Food = {
+        id: `barcode-${code}`,
+        source: 'barcode',
+        name: json.name,
+        brand: json.brand,
+        category: json.category || 'Industrializado',
+        proteinPer100g: json.proteinPer100g,
+        caloriesPer100g: json.caloriesPer100g,
+        carbsPer100g: json.carbsPer100g,
+        fatPer100g: json.fatPer100g,
+        servingGrams: json.servingGrams,
+      };
+
+      addCustomFood(food);
+      setState({ kind: 'found', food, foundVia: 'claude' });
+    } catch (e) {
+      setState({ kind: 'error', message: (e as Error).message });
+    }
+  }
 
   useEffect(() => {
     if (state.kind !== 'scanning') return;
@@ -30,7 +99,6 @@ export function BarcodeTab() {
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
         const reader = new BrowserMultiFormatReader();
 
-        // Force back camera on phones via MediaStreamConstraints.
         const constraints: MediaStreamConstraints = {
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
@@ -43,12 +111,7 @@ export function BarcodeTab() {
             if (cancelled || !result) return;
             const code = result.getText();
             controls.stop();
-            setState({ kind: 'loading', code });
-            fetchOpenFoodFacts(code).then((food) => {
-              if (cancelled) return;
-              if (food) setState({ kind: 'found', food });
-              else setState({ kind: 'not-in-off', code });
-            });
+            lookupCode(code);
           }
         );
         controlsRef.current = controls;
@@ -68,38 +131,80 @@ export function BarcodeTab() {
       cancelled = true;
       controlsRef.current?.stop();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.kind]);
 
   if (state.kind === 'found') {
-    return <ConfirmFood food={state.food} onCancel={() => setState({ kind: 'idle' })} />;
+    return (
+      <div className="flex flex-col gap-3">
+        {state.foundVia === 'cache' && (
+          <div className="flex items-center gap-2 text-xs text-[var(--green)] bg-[var(--green)]/10 px-3 py-2 rounded-xl">
+            <Database className="w-4 h-4" />
+            Encontrado no cache local (zero gasto de API)
+          </div>
+        )}
+        {state.foundVia === 'claude' && (
+          <div className="flex items-center gap-2 text-xs text-[var(--orange)] bg-[var(--orange)]/10 px-3 py-2 rounded-xl">
+            <Sparkles className="w-4 h-4" />
+            Encontrado via Claude (salvo no cache pra próxima vez)
+          </div>
+        )}
+        <ConfirmFood food={state.food} onCancel={() => setState({ kind: 'idle' })} />
+      </div>
+    );
   }
 
   if (state.kind === 'not-in-off') {
+    const canSearchClaude = photoOrSearchAllowed && bState !== 'exceeded';
     return (
-      <div className="flex flex-col items-center text-center gap-4 py-8">
+      <div className="flex flex-col items-center text-center gap-4 py-6">
         <AlertCircle className="w-10 h-10 text-[var(--warn)]" />
         <div>
-          <p className="text-base font-medium">Código lido com sucesso</p>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            <span className="font-mono">{state.code}</span>
-          </p>
+          <p className="text-base font-medium">Código lido</p>
+          <p className="text-sm text-[var(--text-muted)] mt-1 font-mono">{state.code}</p>
           <p className="text-sm text-[var(--text-muted)] mt-3 max-w-xs">
-            Mas esse produto não está cadastrado no Open Food Facts. Tente buscar pelo nome ou tirar foto da tabela nutricional.
+            Mas esse produto não está no Open Food Facts. Posso pedir pro Claude buscar na internet?
           </p>
         </div>
-        <div className="flex gap-2">
+        {canSearchClaude ? (
+          <button
+            onClick={() => searchWithClaude(state.code)}
+            className="flex items-center justify-center gap-2 w-full max-w-xs h-12 rounded-2xl bg-[var(--orange)] text-black font-semibold"
+          >
+            <Sparkles className="w-5 h-5" />
+            Buscar via Claude (~1¢)
+          </button>
+        ) : (
+          <div className="text-xs text-[var(--red)] max-w-xs">
+            Saldo de IA esgotado ou análise por foto desligada. Você pode reativar em Ajustes.
+          </div>
+        )}
+        <div className="flex gap-2 mt-2">
           <button
             onClick={() => setState({ kind: 'scanning' })}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-sm"
           >
-            <RefreshCw className="w-4 h-4" /> Tentar outro
+            <RefreshCw className="w-4 h-4" /> Outro código
           </button>
           <button
             onClick={() => setState({ kind: 'idle' })}
-            className="px-4 py-2 rounded-xl bg-[var(--orange)] text-black text-sm font-medium"
+            className="px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-sm text-[var(--text-muted)]"
           >
             Voltar
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.kind === 'searching-claude') {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--text-muted)]">
+        <Sparkles className="w-8 h-8 text-[var(--orange)] animate-pulse" />
+        <div className="text-sm">Claude pesquisando na internet…</div>
+        <div className="text-xs">Código {state.code}</div>
+        <div className="text-xs text-[var(--text-dim)] max-w-xs text-center mt-2">
+          Pode levar 10-20 segundos. Saldo atual: {centsToUSD(data.apiSpend.totalCents)} / {centsToUSD(data.apiSpend.capCents)}
         </div>
       </div>
     );
@@ -121,12 +226,7 @@ export function BarcodeTab() {
         </label>
         <button
           disabled={!manualCode}
-          onClick={async () => {
-            setState({ kind: 'loading', code: manualCode });
-            const food = await fetchOpenFoodFacts(manualCode);
-            if (food) setState({ kind: 'found', food });
-            else setState({ kind: 'not-in-off', code: manualCode });
-          }}
+          onClick={() => lookupCode(manualCode)}
           className="h-12 rounded-2xl bg-[var(--orange)] text-black font-semibold"
         >
           Buscar
@@ -138,11 +238,11 @@ export function BarcodeTab() {
     );
   }
 
-  if (state.kind === 'loading') {
+  if (state.kind === 'loading-off') {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--text-muted)]">
         <Loader2 className="w-8 h-8 animate-spin text-[var(--orange)]" />
-        <div className="text-sm">Buscando código {state.code}…</div>
+        <div className="text-sm">Buscando código {state.code} no Open Food Facts…</div>
       </div>
     );
   }
@@ -209,8 +309,14 @@ export function BarcodeTab() {
         <Keyboard className="w-4 h-4" />
         Digitar código manualmente
       </button>
+      {data.customFoods.filter((f) => f.source === 'barcode').length > 0 && (
+        <p className="text-xs text-center text-[var(--text-dim)] mt-1 flex items-center justify-center gap-1">
+          <Database className="w-3 h-3" />
+          {data.customFoods.filter((f) => f.source === 'barcode').length} produtos no seu cache local
+        </p>
+      )}
       <p className="text-xs text-center text-[var(--text-dim)] mt-1">
-        Funciona com qualquer produto cadastrado no <span className="text-[var(--orange)]">Open Food Facts</span> (gratuito).
+        1º tentamos no <span className="text-[var(--orange)]">Open Food Facts</span> (grátis). Se não tiver, ofereço busca via Claude.
       </p>
     </div>
   );
