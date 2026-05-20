@@ -11,9 +11,12 @@ const MAX_SEARCHES = 3;
 
 const SYSTEM_PROMPT = `Você é um buscador de informações nutricionais de produtos brasileiros para um app de contagem de proteína.
 
-Receberá um código de barras OU um nome de produto. Use a ferramenta web_search para encontrar a tabela nutricional desse produto.
+Receberá um código de barras OU um nome de produto. Use a ferramenta web_search para identificar o produto e encontrar sua tabela nutricional.
 
-Responda EXCLUSIVAMENTE com JSON no formato:
+PRIMEIRO: identifique o tipo de produto. Se NÃO for um alimento ou bebida consumível por humanos (ex: produto de limpeza, cosmético, eletrônico, livro, medicamento, ração animal, suplemento que não é alimento), responda:
+{ "errorKind": "not_food", "identifiedAs": "descrição curta do que é o produto" }
+
+Se for alimento/bebida, responda EXCLUSIVAMENTE com JSON no formato:
 {
   "name": "Nome do produto em português",
   "brand": "Marca (opcional)",
@@ -27,8 +30,8 @@ Responda EXCLUSIVAMENTE com JSON no formato:
   "note": "observação curta opcional sobre fontes ou incertezas"
 }
 
-Se não conseguir encontrar informações confiáveis depois de buscar, responda:
-{ "error": "Não foi possível encontrar a tabela nutricional desse produto." }
+Se for um alimento mas você não conseguir encontrar a tabela nutricional após buscar, responda:
+{ "errorKind": "not_found", "error": "Não foi possível encontrar a tabela nutricional desse produto." }
 
 Regras:
 - Use valores POR 100 g (não por porção). Se a tabela do produto for por porção, converta.
@@ -91,23 +94,39 @@ export async function POST(req: NextRequest) {
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    if (parsed.error) {
-      const usage = response.usage;
-      const tokenCents = estimateRequestCents(usage.input_tokens ?? 0, usage.output_tokens ?? 0);
-      // Count how many web_search calls were actually used
-      const searchesUsed = response.usage.server_tool_use?.web_search_requests ?? 0;
-      const estimatedCents = tokenCents + searchesUsed * WEB_SEARCH_COST_CENTS;
-      return NextResponse.json({ error: parsed.error, estimatedCents }, { status: 404 });
+    const usage = response.usage;
+    const tokenCents = estimateRequestCents(usage.input_tokens ?? 0, usage.output_tokens ?? 0);
+    const searchesUsed = response.usage.server_tool_use?.web_search_requests ?? 0;
+    const estimatedCents = tokenCents + searchesUsed * WEB_SEARCH_COST_CENTS;
+
+    if (parsed.errorKind === 'not_food') {
+      return NextResponse.json(
+        {
+          errorKind: 'not_food',
+          identifiedAs: parsed.identifiedAs ?? 'item não alimentício',
+          estimatedCents,
+        },
+        { status: 422 }
+      );
+    }
+
+    if (parsed.errorKind === 'not_found' || parsed.error) {
+      return NextResponse.json(
+        {
+          errorKind: 'not_found',
+          error: parsed.error || 'Tabela nutricional não localizada.',
+          estimatedCents,
+        },
+        { status: 404 }
+      );
     }
 
     if (typeof parsed.name !== 'string' || typeof parsed.proteinPer100g !== 'number') {
-      return NextResponse.json({ error: 'Resposta incompleta da IA.' }, { status: 502 });
+      return NextResponse.json(
+        { error: 'Resposta incompleta da IA.', estimatedCents },
+        { status: 502 }
+      );
     }
-
-    const usage = response.usage;
-    const tokenCents = estimateRequestCents(usage.input_tokens ?? 0, usage.output_tokens ?? 0);
-    const searchesUsed = response.content.filter((c) => c.type === 'server_tool_use').length;
-    const estimatedCents = tokenCents + searchesUsed * WEB_SEARCH_COST_CENTS;
 
     return NextResponse.json({
       ...parsed,

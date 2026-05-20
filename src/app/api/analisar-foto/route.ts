@@ -9,7 +9,12 @@ const MODEL = 'claude-haiku-4-5-20251001';
 
 const SYSTEM_PROMPT = `Você é um analisador de alimentos brasileiros para um app de contagem de proteína.
 
-A partir de uma foto, identifique o alimento principal e responda EXCLUSIVAMENTE com JSON no formato:
+A partir de uma foto, identifique o alimento principal.
+
+PRIMEIRO: verifique se a foto contém um alimento ou bebida consumível por humanos. Se NÃO contiver (ex: objeto, animal vivo, cosmético, embalagem fechada de algo não-alimentício, paisagem, pessoa, ração de pet, etc), responda:
+{ "errorKind": "not_food", "identifiedAs": "descrição curta do que aparece na foto" }
+
+Se contiver alimento/bebida, responda EXCLUSIVAMENTE com JSON no formato:
 {
   "name": "Nome do alimento em português",
   "category": "Categoria (ex: Carnes, Laticínios, Suplementos)",
@@ -25,7 +30,7 @@ A partir de uma foto, identifique o alimento principal e responda EXCLUSIVAMENTE
 Regras:
 - Use valores médios para o alimento identificado (referências TACO/USDA).
 - Se for um produto industrializado e você puder ler a tabela nutricional na foto, use os valores reais.
-- Se não conseguir identificar com clareza, retorne JSON com "confidence": "baixa" e use seu melhor palpite.
+- Se for alimento mas você não conseguir identificar com clareza, retorne JSON com "confidence": "baixa" e use seu melhor palpite.
 - NUNCA escreva texto fora do JSON.`;
 
 export async function POST(req: NextRequest) {
@@ -82,15 +87,26 @@ export async function POST(req: NextRequest) {
     }
     const parsed = JSON.parse(jsonMatch[0]);
 
-    if (typeof parsed.name !== 'string' || typeof parsed.proteinPer100g !== 'number') {
-      return NextResponse.json({ error: 'Resposta da IA incompleta.' }, { status: 502 });
-    }
-
     const usage = response.usage;
     const estimatedCents = estimateRequestCents(
       usage.input_tokens ?? 0,
       usage.output_tokens ?? 0
     );
+
+    if (parsed.errorKind === 'not_food') {
+      return NextResponse.json(
+        {
+          errorKind: 'not_food',
+          identifiedAs: parsed.identifiedAs ?? 'item não alimentício',
+          estimatedCents,
+        },
+        { status: 422 }
+      );
+    }
+
+    if (typeof parsed.name !== 'string' || typeof parsed.proteinPer100g !== 'number') {
+      return NextResponse.json({ error: 'Resposta da IA incompleta.', estimatedCents }, { status: 502 });
+    }
 
     return NextResponse.json({
       ...parsed,

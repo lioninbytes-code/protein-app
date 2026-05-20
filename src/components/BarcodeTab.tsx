@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Loader2, AlertCircle, Keyboard, RefreshCw, Sparkles, Database } from 'lucide-react';
+import { Camera, Loader2, AlertCircle, Keyboard, RefreshCw, Sparkles, Database, Ban } from 'lucide-react';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
 import { addCustomFood, findCustomFood, logApiSpend } from '@/lib/storage';
@@ -16,6 +16,7 @@ type State =
   | { kind: 'not-in-off'; code: string }
   | { kind: 'searching-claude'; code: string }
   | { kind: 'found'; food: Food; fromCache?: boolean; foundVia?: 'cache' | 'off' | 'claude' }
+  | { kind: 'not-food'; code: string; identifiedAs: string }
   | { kind: 'manual' }
   | { kind: 'error'; message: string };
 
@@ -64,8 +65,20 @@ export function BarcodeTab() {
         logApiSpend(json.estimatedCents, 'photo');
       }
 
-      if (!res.ok || json.error) {
-        setState({ kind: 'error', message: json.error || `Erro ${res.status}` });
+      if (json.errorKind === 'not_food') {
+        setState({
+          kind: 'not-food',
+          code,
+          identifiedAs: json.identifiedAs || 'algo que não é alimento',
+        });
+        return;
+      }
+
+      if (!res.ok || json.error || json.errorKind === 'not_found') {
+        setState({
+          kind: 'error',
+          message: json.error || 'Produto não encontrado nem via Claude.',
+        });
         return;
       }
 
@@ -150,6 +163,38 @@ export function BarcodeTab() {
           </div>
         )}
         <ConfirmFood food={state.food} onCancel={() => setState({ kind: 'idle' })} />
+      </div>
+    );
+  }
+
+  if (state.kind === 'not-food') {
+    return (
+      <div className="flex flex-col items-center text-center gap-4 py-8">
+        <Ban className="w-12 h-12 text-[var(--red)]" />
+        <div>
+          <p className="text-base font-medium">Isso não é um alimento</p>
+          <p className="text-sm text-[var(--text-muted)] mt-1 font-mono">{state.code}</p>
+          <p className="text-sm text-[var(--text)] mt-3 max-w-xs">
+            Identificado como: <span className="font-medium">{state.identifiedAs}</span>
+          </p>
+          <p className="text-xs text-[var(--text-dim)] mt-2 max-w-xs">
+            Só dá pra registrar comida ou bebida no contador de proteína.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setState({ kind: 'scanning' })}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-sm"
+          >
+            <RefreshCw className="w-4 h-4" /> Outro código
+          </button>
+          <button
+            onClick={() => setState({ kind: 'idle' })}
+            className="px-4 py-2 rounded-xl bg-[var(--orange)] text-black text-sm font-medium"
+          >
+            Voltar
+          </button>
+        </div>
       </div>
     );
   }

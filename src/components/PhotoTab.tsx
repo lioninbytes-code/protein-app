@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Camera, Loader2, AlertCircle } from 'lucide-react';
+import { Camera, Loader2, AlertCircle, Ban, RefreshCw } from 'lucide-react';
 import { Food } from '@/lib/types';
 import { ConfirmFood } from './ConfirmFood';
 import { addCustomFood, logApiSpend } from '@/lib/storage';
@@ -13,6 +13,7 @@ type State =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'found'; food: Food; previewUrl: string }
+  | { kind: 'not-food'; identifiedAs: string; previewUrl: string }
   | { kind: 'error'; message: string };
 
 export function PhotoTab() {
@@ -34,13 +35,23 @@ export function PhotoTab() {
       });
 
       const json = await res.json();
-      if (!res.ok) {
-        setState({ kind: 'error', message: json.error || 'Erro desconhecido.' });
-        return;
-      }
 
       if (typeof json.estimatedCents === 'number') {
         logApiSpend(json.estimatedCents, 'photo');
+      }
+
+      if (json.errorKind === 'not_food') {
+        setState({
+          kind: 'not-food',
+          identifiedAs: json.identifiedAs || 'algo que não é alimento',
+          previewUrl,
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        setState({ kind: 'error', message: json.error || 'Erro desconhecido.' });
+        return;
       }
 
       // Stable ID by name slug so repeated photos of the same food
@@ -70,6 +81,35 @@ export function PhotoTab() {
     } catch (e) {
       setState({ kind: 'error', message: (e as Error).message });
     }
+  }
+
+  if (state.kind === 'not-food') {
+    return (
+      <div className="flex flex-col items-center text-center gap-4 py-4">
+        <div className="w-full aspect-square max-w-sm overflow-hidden rounded-2xl border border-[var(--border)] opacity-60">
+          <img src={state.previewUrl} alt="Foto" className="w-full h-full object-cover" />
+        </div>
+        <Ban className="w-12 h-12 text-[var(--red)]" />
+        <div>
+          <p className="text-base font-medium">Isso não é um alimento</p>
+          <p className="text-sm text-[var(--text)] mt-2 max-w-xs">
+            Identifiquei: <span className="font-medium">{state.identifiedAs}</span>
+          </p>
+          <p className="text-xs text-[var(--text-dim)] mt-2 max-w-xs">
+            Só dá pra registrar comida ou bebida no contador de proteína. Tente outra foto.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            URL.revokeObjectURL(state.previewUrl);
+            setState({ kind: 'idle' });
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--orange)] text-black text-sm font-medium"
+        >
+          <RefreshCw className="w-4 h-4" /> Tentar outra foto
+        </button>
+      </div>
+    );
   }
 
   if (state.kind === 'found') {
