@@ -14,18 +14,23 @@ type Props = {
 
 export function ConfirmFood({ food, onCancel, initialGrams }: Props) {
   const router = useRouter();
-  const [grams, setGrams] = useState(initialGrams ?? food.servingGrams ?? 100);
-  const [servings, setServings] = useState(
-    initialGrams && food.servingGrams
-      ? Math.max(0.5, Math.round((initialGrams / food.servingGrams) * 2) / 2)
-      : 1
-  );
+  const defaultGrams = initialGrams ?? food.servingGrams ?? 100;
+  const [grams, setGrams] = useState<number>(defaultGrams);
 
-  const totalGrams = food.servingGrams ? food.servingGrams * servings : grams;
+  const totalGrams = Math.max(0, grams);
   const proteinG = (food.proteinPer100g * totalGrams) / 100;
   const kcal = (food.caloriesPer100g * totalGrams) / 100;
 
-  const useServings = !!food.servingGrams;
+  const servingGrams = food.servingGrams;
+  const servingShortcuts = servingGrams
+    ? [
+        { label: '½', g: Math.round(servingGrams * 0.5) },
+        { label: '1', g: servingGrams },
+        { label: '2', g: servingGrams * 2 },
+        { label: '3', g: servingGrams * 3 },
+      ]
+    : [];
+  const gramShortcuts = servingGrams ? [10, 20, 50, 100] : [50, 100, 150, 200];
 
   function handleAdd() {
     addEntry(food, totalGrams);
@@ -41,65 +46,60 @@ export function ConfirmFood({ food, onCancel, initialGrams }: Props) {
       </div>
 
       <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 flex flex-col gap-4">
-        {useServings ? (
-          <>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
-                Porções (1 porção = {food.servingGrams} g)
-              </span>
-              <div className="flex gap-2">
-                {[0.5, 1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setServings(n)}
-                    className={`flex-1 py-2 rounded-xl text-sm font-medium ${
-                      servings === n
-                        ? 'bg-[var(--orange)] text-black'
-                        : 'bg-[var(--bg)] border border-[var(--border)] text-[var(--text-muted)]'
-                    }`}
-                  >
-                    {n === 0.5 ? '½' : n}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="number"
-                inputMode="decimal"
-                step={0.5}
-                min={0.5}
-                value={servings === 0 ? '' : servings}
-                onChange={(e) => setServings(e.target.value === '' ? 0 : Number(e.target.value))}
-                onBlur={() => setServings((s) => Math.max(0.1, s || 0.1))}
-                className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-base font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
-              />
-            </label>
-          </>
-        ) : (
-          <label className="flex flex-col gap-2">
-            <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Quantidade (gramas)</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              step={5}
-              min={1}
-              value={grams === 0 ? '' : grams}
-              onChange={(e) => setGrams(e.target.value === '' ? 0 : Number(e.target.value))}
-              onBlur={() => setGrams((g) => Math.max(1, g || 1))}
-              className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-lg font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
-            />
+        {servingGrams && (
+          <div>
+            <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">
+              Porção padrão = {servingGrams} g
+            </div>
             <div className="flex gap-2">
-              {[50, 100, 150, 200].map((n) => (
+              {servingShortcuts.map(({ label, g }) => (
                 <button
-                  key={n}
-                  onClick={() => setGrams(n)}
-                  className="flex-1 py-1.5 rounded-lg text-xs bg-[var(--bg)] border border-[var(--border)] text-[var(--text-muted)]"
+                  key={label}
+                  onClick={() => setGrams(g)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium ${
+                    Math.round(grams) === Math.round(g)
+                      ? 'bg-[var(--orange)] text-black'
+                      : 'bg-[var(--bg)] border border-[var(--border)] text-[var(--text-muted)]'
+                  }`}
                 >
-                  {n} g
+                  <div>{label}</div>
+                  <div className="text-[10px] opacity-70 font-normal">{Math.round(g)} g</div>
                 </button>
               ))}
             </div>
-          </label>
+          </div>
         )}
+
+        <label className="flex flex-col gap-2">
+          <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+            Peso consumido (gramas)
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            step={1}
+            min={0}
+            value={grams === 0 ? '' : grams}
+            onChange={(e) => setGrams(e.target.value === '' ? 0 : Number(e.target.value))}
+            onBlur={() => setGrams((g) => Math.max(1, g || 1))}
+            className="bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-lg font-semibold tabular-nums focus:outline-none focus:border-[var(--orange)]"
+          />
+          <div className="flex gap-2">
+            {gramShortcuts.map((n) => (
+              <button
+                key={n}
+                onClick={() => setGrams(n)}
+                className={`flex-1 py-1.5 rounded-lg text-xs ${
+                  Math.round(grams) === n
+                    ? 'bg-[var(--orange)]/20 border border-[var(--orange)] text-[var(--orange-bright)]'
+                    : 'bg-[var(--bg)] border border-[var(--border)] text-[var(--text-muted)]'
+                }`}
+              >
+                {n} g
+              </button>
+            ))}
+          </div>
+        </label>
 
         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[var(--border)]">
           <div className="text-center">
@@ -128,7 +128,8 @@ export function ConfirmFood({ food, onCancel, initialGrams }: Props) {
         </button>
         <button
           onClick={handleAdd}
-          className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-[var(--orange)] text-black font-semibold"
+          disabled={totalGrams <= 0}
+          className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-[var(--orange)] text-black font-semibold disabled:opacity-50"
         >
           <Check className="w-5 h-5" strokeWidth={2.5} /> Adicionar
         </button>
